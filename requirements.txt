@@ -1,0 +1,20 @@
+# Core requirements
+python-dotenv>=0.19.0  # For managing environment variables
+
+# Email automation
+secure-smtplib>=0.1.1  # For secure SMTP connections
+email-validator>=1.1.3  # For email validation
+
+# Web automation
+selenium>=4.0.0
+webdriver-manager>=3.5.2  # For managing web drivers
+
+# Scheduling
+schedule>=1.1.0  # For task scheduling
+
+# Development tools
+pytest>=6.2.5  # For testing
+black>=21.12b0  # For code formatting
+isort>=5.10.1  # For import sorting
+mypy>=0.910  # For static type checking
+flake8>=4.0.1  # For code linting

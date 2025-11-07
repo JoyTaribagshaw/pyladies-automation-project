@@ -1,0 +1,333 @@
+"""
+Web Automation Module
+
+This module provides functions to automate web interactions using Selenium WebDriver,
+including form filling, button clicking, and web scraping.
+"""
+
+import time
+import logging
+from pathlib import Path
+from typing import Optional, Dict, List, Union, Any
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import (
+    TimeoutException,
+    NoSuchElementException,
+    WebDriverException
+)
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.core.utils import ChromeType
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('web_automation.log')
+    ]
+)
+logger = logging.getLogger(__name__)
+
+class WebAutomation:
+    """A class to handle web automation tasks using Selenium WebDriver."""
+    
+    def __init__(
+        self,
+        headless: bool = False,
+        download_dir: Optional[str] = None,
+        implicit_wait: int = 10,
+        chrome_path: Optional[str] = None
+    ):
+        """
+        Initialize the WebAutomation with Chrome WebDriver.
+        
+        Args:
+            headless: Run browser in headless mode (no GUI)
+            download_dir: Directory to save downloaded files
+            implicit_wait: Default wait time for finding elements (seconds)
+            chrome_path: Path to Chrome/Chromium executable (optional)
+        ""
+        self.driver = None
+        self.headless = headless
+        self.download_dir = download_dir
+        self.implicit_wait = implicit_wait
+        self.chrome_path = chrome_path
+        
+    def start_browser(self) -> None:
+        """Start the Chrome browser with configured options."""
+        try:
+            options = ChromeOptions()
+            
+            # Add common options
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-notifications')
+            options.add_argument('--disable-gpu')
+            options.add_argument('--disable-extensions')
+            options.add_argument('--start-maximized')
+            
+            # Set download directory if specified
+            if self.download_dir:
+                prefs = {
+                    'download.default_directory': str(Path(self.download_dir).absolute()),
+                    'download.prompt_for_download': False,
+                    'download.directory_upgrade': True,
+                    'safebrowsing.enabled': True
+                }
+                options.add_experimental_option('prefs', prefs)
+            
+            # Set headless mode if specified
+            if self.headless:
+                options.add_argument('--headless=new')
+            
+            # Set Chrome binary location if specified
+            if self.chrome_path:
+                options.binary_location = self.chrome_path
+            
+            # Initialize the WebDriver
+            self.driver = webdriver.Chrome(
+                service=ChromeService(ChromeDriverManager().install()),
+                options=options
+            )
+            
+            # Set implicit wait
+            self.driver.implicitly_wait(self.implicit_wait)
+            logger.info("Browser started successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to start browser: {e}")
+            raise
+    
+    def close_browser(self) -> None:
+        """Close the browser and quit the WebDriver."""
+        if self.driver:
+            try:
+                self.driver.quit()
+                logger.info("Browser closed successfully")
+            except Exception as e:
+                logger.error(f"Error while closing browser: {e}")
+            finally:
+                self.driver = None
+    
+    def __enter__(self):
+        """Context manager entry."""
+        self.start_browser()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.close_browser()
+    
+    def navigate_to(self, url: str) -> bool:
+        """Navigate to the specified URL."""
+        if not self.driver:
+            logger.error("Browser not started. Call start_browser() first.")
+            return False
+        
+        try:
+            self.driver.get(url)
+            logger.info(f"Navigated to: {url}")
+            return True
+        except WebDriverException as e:
+            logger.error(f"Failed to navigate to {url}: {e}")
+            return False
+    
+    def find_element(self, by: str, value: str, timeout: int = None):
+        """
+        Find a single web element.
+        
+        Args:
+            by: Locator strategy (id, name, xpath, css_selector, etc.)
+            value: Locator value
+            timeout: Maximum time to wait (seconds)
+            
+        Returns:
+            WebElement if found, None otherwise
+        """
+        if not self.driver:
+            logger.error("Browser not started. Call start_browser() first.")
+            return None
+        
+        try:
+            if timeout:
+                element = WebDriverWait(self.driver, timeout).until(
+                    EC.presence_of_element_located((by, value))
+                )
+            else:
+                element = self.driver.find_element(by, value)
+            return element
+        except (TimeoutException, NoSuchElementException) as e:
+            logger.warning(f"Element not found: {by}={value}")
+            return None
+    
+    def click_element(self, by: str, value: str, timeout: int = None) -> bool:
+        """Click on an element."""
+        element = self.find_element(by, value, timeout)
+        if element:
+            try:
+                element.click()
+                logger.info(f"Clicked element: {by}={value}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to click element: {e}")
+        return False
+    
+    def type_text(self, by: str, value: str, text: str, clear: bool = True) -> bool:
+        """Type text into an input field."""
+        element = self.find_element(by, value)
+        if element:
+            try:
+                if clear:
+                    element.clear()
+                element.send_keys(text)
+                logger.info(f"Typed text into {by}={value}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to type text: {e}")
+        return False
+    
+    def select_dropdown(self, by: str, value: str, option: str, by_visible_text: bool = True) -> bool:
+        """Select an option from a dropdown."""
+        element = self.find_element(by, value)
+        if element:
+            try:
+                select = Select(element)
+                if by_visible_text:
+                    select.select_by_visible_text(option)
+                else:
+                    select.select_by_value(option)
+                logger.info(f"Selected '{option}' from dropdown {by}={value}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to select dropdown option: {e}")
+        return False
+    
+    def take_screenshot(self, filename: str = None) -> Optional[str]:
+        """Take a screenshot and save it to a file."""
+        if not self.driver:
+            logger.error("Browser not started. Call start_browser() first.")
+            return None
+        
+        try:
+            if not filename:
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                filename = f"screenshot_{timestamp}.png"
+            
+            # Ensure the filename has .png extension
+            if not filename.lower().endswith('.png'):
+                filename += '.png'
+            
+            self.driver.save_screenshot(filename)
+            logger.info(f"Screenshot saved as {filename}")
+            return filename
+        except Exception as e:
+            logger.error(f"Failed to take screenshot: {e}")
+            return None
+    
+    def wait_for_element(self, by: str, value: str, timeout: int = 10) -> bool:
+        """Wait for an element to be present on the page."""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.presence_of_element_located((by, value))
+            )
+            return True
+        except TimeoutException:
+            logger.warning(f"Element {by}={value} not found within {timeout} seconds")
+            return False
+    
+    def get_page_source(self) -> Optional[str]:
+        """Get the page source HTML."""
+        if self.driver:
+            return self.driver.page_source
+        return None
+    
+    def execute_js(self, script: str, *args) -> Any:
+        """Execute JavaScript code."""
+        if self.driver:
+            return self.driver.execute_script(script, *args)
+        return None
+
+# Example functions for common tasks
+def search_google(query: str, headless: bool = True) -> None:
+    """Search Google for a query and take a screenshot of the results."""
+    with WebAutomation(headless=headless) as auto:
+        # Navigate to Google
+        auto.navigate_to("https://www.google.com")
+        
+        # Accept cookies if the banner appears
+        auto.click_element(By.ID, "L2AGLb")
+        
+        # Type the search query and submit
+        auto.type_text(By.NAME, "q", query)
+        auto.click_element(By.NAME, "btnK")
+        
+        # Wait for results and take a screenshot
+        auto.wait_for_element(By.ID, "search")
+        auto.take_screenshot(f"google_search_{query.replace(' ', '_')}.png")
+        
+        # Print the first result title
+        first_result = auto.find_element(By.CSS_SELECTOR, "h3")
+        if first_result:
+            print(f"First result: {first_result.text}")
+
+def fill_contact_form(url: str, form_data: Dict[str, str]) -> bool:
+    """Fill out and submit a contact form."""
+    with WebAutomation(headless=False) as auto:
+        try:
+            auto.navigate_to(url)
+            
+            # Fill in form fields
+            for field, value in form_data.items():
+                if field == 'message':
+                    auto.type_text(By.NAME, field, value)
+                else:
+                    auto.type_text(By.NAME, field, value)
+            
+            # Submit the form
+            auto.click_element(By.CSS_SELECTOR, "button[type='submit']")
+            
+            # Wait for success message or redirect
+            time.sleep(2)  # Adjust based on the form's behavior
+            
+            # Take a screenshot of the result
+            auto.take_screenshot("form_submission_result.png")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error submitting form: {e}")
+            return False
+
+if __name__ == "__main__":
+    # Example usage
+    print("=== Web Automation Examples ===")
+    print("1. Search Google")
+    print("2. Fill Contact Form")
+    
+    choice = input("Enter your choice (1-2): ").strip()
+    
+    if choice == "1":
+        query = input("Enter search query: ").strip()
+        search_google(query, headless=False)
+        print("Search completed. Check the screenshot in the current directory.")
+    
+    elif choice == "2":
+        form_url = input("Enter form URL: ").strip()
+        form_data = {
+            'name': input("Name: "),
+            'email': input("Email: "),
+            'subject': input("Subject: "),
+            'message': input("Message: ")
+        }
+        if fill_contact_form(form_url, form_data):
+            print("Form submitted successfully!")
+        else:
+            print("Failed to submit form. Check the logs for details.")
+    
+    else:
+        print("Invalid choice. Please try again.")
