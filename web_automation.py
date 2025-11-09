@@ -310,37 +310,67 @@ def search_google(query: str, headless: bool = True) -> None:
         auto.navigate_to("https://www.google.com")
         
         # Accept cookies if the banner appears (try multiple possible selectors)
-        cookie_selectors = ["#L2AGLb", "[aria-label*='Accept']", "[aria-label*='Accept all']", "button:contains('Accept')"]
+        cookie_selectors = [
+            "#L2AGLb",  # Google's main accept button ID
+            "[aria-label*='Accept']",  # Buttons with Accept in aria-label
+            "[aria-label*='Accept all']",  # Accept all variations
+            "button[id*='accept']",  # Buttons with accept in ID
+            "button[class*='accept']",  # Buttons with accept in class
+        ]
         for selector in cookie_selectors:
             if auto.click_element(By.CSS_SELECTOR, selector):
-                logger.info("Clicked cookie acceptance button")
+                logger.info(f"Clicked cookie acceptance button: {selector}")
                 break
+        else:
+            logger.info("No cookie banner found or clicked")
         
         # Type the search query
         search_box = auto.find_element(By.NAME, "q")
         if search_box:
+            logger.info(f"Found search box, typing query: {query}")
             auto.type_text(By.NAME, "q", query)
             
             # Try multiple ways to trigger search
+            search_triggered = False
             try:
                 # Method 1: Press Enter key
+                logger.info("Trying Enter key method...")
                 search_box.send_keys(Keys.RETURN)
                 logger.info("Triggered search with Enter key")
-            except:
+                search_triggered = True
+            except Exception as e1:
+                logger.warning(f"Enter key method failed: {e1}")
                 try:
                     # Method 2: Click the search button (original approach)
-                    auto.click_element(By.NAME, "btnK")
-                    logger.info("Clicked search button")
-                except:
+                    logger.info("Trying search button click...")
+                    if auto.click_element(By.NAME, "btnK"):
+                        logger.info("Clicked search button")
+                        search_triggered = True
+                    else:
+                        # Try alternative search button
+                        if auto.click_element(By.CSS_SELECTOR, "[aria-label='Google Search']"):
+                            logger.info("Clicked alternative search button")
+                            search_triggered = True
+                except Exception as e2:
+                    logger.warning(f"Search button method failed: {e2}")
                     try:
                         # Method 3: Use Google's search URL directly
+                        logger.info("Trying direct URL method...")
                         import urllib.parse
                         search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
                         auto.navigate_to(search_url)
                         logger.info("Used direct search URL")
-                    except Exception as e:
-                        logger.error(f"All search methods failed: {e}")
+                        search_triggered = True
+                    except Exception as e3:
+                        logger.error(f"All search methods failed: {e1}, {e2}, {e3}")
                         return
+            
+            if not search_triggered:
+                logger.error("No search method succeeded")
+                return
+        else:
+            logger.error("Could not find Google search box")
+            return
         
         # Wait for results and take a screenshot
         import time
