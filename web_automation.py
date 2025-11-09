@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Union, Any
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
@@ -308,21 +309,62 @@ def search_google(query: str, headless: bool = True) -> None:
         # Navigate to Google
         auto.navigate_to("https://www.google.com")
         
-        # Accept cookies if the banner appears
-        auto.click_element(By.ID, "L2AGLb")
+        # Accept cookies if the banner appears (try multiple possible selectors)
+        cookie_selectors = ["#L2AGLb", "[aria-label*='Accept']", "[aria-label*='Accept all']", "button:contains('Accept')"]
+        for selector in cookie_selectors:
+            if auto.click_element(By.CSS_SELECTOR, selector):
+                logger.info("Clicked cookie acceptance button")
+                break
         
-        # Type the search query and submit
-        auto.type_text(By.NAME, "q", query)
-        auto.click_element(By.NAME, "btnK")
+        # Type the search query
+        search_box = auto.find_element(By.NAME, "q")
+        if search_box:
+            auto.type_text(By.NAME, "q", query)
+            
+            # Try multiple ways to trigger search
+            try:
+                # Method 1: Press Enter key
+                search_box.send_keys(Keys.RETURN)
+                logger.info("Triggered search with Enter key")
+            except:
+                try:
+                    # Method 2: Click the search button (original approach)
+                    auto.click_element(By.NAME, "btnK")
+                    logger.info("Clicked search button")
+                except:
+                    try:
+                        # Method 3: Use Google's search URL directly
+                        import urllib.parse
+                        search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
+                        auto.navigate_to(search_url)
+                        logger.info("Used direct search URL")
+                    except Exception as e:
+                        logger.error(f"All search methods failed: {e}")
+                        return
         
         # Wait for results and take a screenshot
-        auto.wait_for_element(By.ID, "search")
-        auto.take_screenshot(f"google_search_{query.replace(' ', '_')}.png")
+        import time
+        time.sleep(3)  # Give page time to load
         
-        # Print the first result title
-        first_result = auto.find_element(By.CSS_SELECTOR, "h3")
-        if first_result:
-            print(f"First result: {first_result.text}")
+        # Check if we're on a results page
+        if "search?q=" in auto.driver.current_url or auto.find_element(By.ID, "search"):
+            auto.take_screenshot(f"google_search_{query.replace(' ', '_')}.png")
+            
+            # Try to get the first result title
+            result_selectors = ["h3", "[data-attrid] h3", ".g h3", ".tF2Cxc h3"]
+            first_result = None
+            for selector in result_selectors:
+                first_result = auto.find_element(By.CSS_SELECTOR, selector)
+                if first_result:
+                    break
+            
+            if first_result:
+                print(f"First result: {first_result.text}")
+            else:
+                print("Search completed - screenshot saved!")
+        else:
+            logger.warning("Search may not have completed successfully")
+            auto.take_screenshot(f"google_search_error_{query.replace(' ', '_')}.png")
 
 def fill_contact_form(url: str, form_data: Dict[str, str]) -> bool:
     """Fill out and submit a contact form."""
