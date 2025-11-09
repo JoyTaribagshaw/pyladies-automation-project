@@ -21,7 +21,6 @@ from selenium.common.exceptions import (
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.core.utils import ChromeType
 
 # Set up logging
 logging.basicConfig(
@@ -52,7 +51,7 @@ class WebAutomation:
             download_dir: Directory to save downloaded files
             implicit_wait: Default wait time for finding elements (seconds)
             chrome_path: Path to Chrome/Chromium executable (optional)
-        ""
+        """
         self.driver = None
         self.headless = headless
         self.download_dir = download_dir
@@ -86,15 +85,64 @@ class WebAutomation:
             if self.headless:
                 options.add_argument('--headless=new')
             
-            # Set Chrome binary location if specified
+            # Set Chrome binary location if specified, or try to find it
             if self.chrome_path:
                 options.binary_location = self.chrome_path
+            else:
+                # Try to find Chrome/Chromium automatically
+                import shutil
+                possible_paths = [
+                    '/usr/bin/chromium',
+                    '/usr/bin/chromium-browser', 
+                    '/usr/bin/google-chrome',
+                    '/usr/bin/google-chrome-stable',
+                    '/snap/bin/chromium',
+                ]
+                for path in possible_paths:
+                    if shutil.which(path):
+                        options.binary_location = path
+                        logger.info(f"Found Chrome/Chromium at: {path}")
+                        break
             
-            # Initialize the WebDriver
-            self.driver = webdriver.Chrome(
-                service=ChromeService(ChromeDriverManager().install()),
-                options=options
-            )
+            # Try to initialize the WebDriver with better error handling
+            try:
+                # First try: Use webdriver-manager
+                self.driver = webdriver.Chrome(
+                    service=ChromeService(ChromeDriverManager().install()),
+                    options=options
+                )
+            except Exception as e1:
+                logger.warning(f"webdriver-manager failed: {e1}")
+                try:
+                    # Second try: Use system chromedriver
+                    system_chromedriver = shutil.which('chromedriver')
+                    if system_chromedriver:
+                        logger.info(f"Trying system chromedriver: {system_chromedriver}")
+                        self.driver = webdriver.Chrome(
+                            service=ChromeService(system_chromedriver),
+                            options=options
+                        )
+                    else:
+                        # Third try: Let Selenium find chromedriver automatically
+                        logger.info("Trying automatic chromedriver detection")
+                        self.driver = webdriver.Chrome(options=options)
+                except Exception as e2:
+                    logger.error(f"All WebDriver initialization attempts failed")
+                    logger.error(f"webdriver-manager error: {e1}")
+                    logger.error(f"System chromedriver error: {e2}")
+                    
+                    # Provide helpful error message
+                    error_msg = (
+                        "Failed to start Chrome WebDriver. This could be due to:\n"
+                        "1. Chrome/Chromium version mismatch with ChromeDriver\n"
+                        "2. Missing Chrome/Chromium browser\n"
+                        "3. Outdated ChromeDriver\n\n"
+                        "Try these solutions:\n"
+                        "- Install/update Chrome: sudo pacman -S chromium\n" 
+                        "- Update ChromeDriver: pip install --upgrade selenium webdriver-manager\n"
+                        "- Check browser path in options.binary_location\n"
+                    )
+                    raise Exception(error_msg)
             
             # Set implicit wait
             self.driver.implicitly_wait(self.implicit_wait)
@@ -308,13 +356,18 @@ if __name__ == "__main__":
     print("=== Web Automation Examples ===")
     print("1. Search Google")
     print("2. Fill Contact Form")
+    print("3. Demo Mode (no browser needed)")
     
-    choice = input("Enter your choice (1-2): ").strip()
+    choice = input("Enter your choice (1-3): ").strip()
     
     if choice == "1":
         query = input("Enter search query: ").strip()
-        search_google(query, headless=False)
-        print("Search completed. Check the screenshot in the current directory.")
+        try:
+            search_google(query, headless=False)
+            print("Search completed. Check the screenshot in the current directory.")
+        except Exception as e:
+            print(f"❌ Web automation failed: {e}")
+            print("💡 Try Demo Mode (option 3) to see what this script would do")
     
     elif choice == "2":
         form_url = input("Enter form URL: ").strip()
@@ -324,10 +377,56 @@ if __name__ == "__main__":
             'subject': input("Subject: "),
             'message': input("Message: ")
         }
-        if fill_contact_form(form_url, form_data):
-            print("Form submitted successfully!")
-        else:
-            print("Failed to submit form. Check the logs for details.")
+        try:
+            if fill_contact_form(form_url, form_data):
+                print("Form submitted successfully!")
+            else:
+                print("Failed to submit form. Check the logs for details.")
+        except Exception as e:
+            print(f"❌ Web automation failed: {e}")
+            print("💡 Try Demo Mode (option 3) to see what this script would do")
+    
+    elif choice == "3":
+        print("\n🎭 DEMO MODE - What this script can do:")
+        print("=" * 50)
+        
+        query = "PyLadies automation"
+        print(f"\n🔍 Google Search Demo:")
+        print(f"   Query: '{query}'")
+        print("   ✅ Would open browser (headless or visible)")
+        print("   ✅ Would navigate to https://www.google.com")
+        print("   ✅ Would accept cookie banner if present")
+        print(f"   ✅ Would type '{query}' in search box")
+        print("   ✅ Would click search button")
+        print("   ✅ Would wait for results page")
+        print("   ✅ Would take screenshot: google_search_PyLadies_automation.png")
+        print("   ✅ Would extract first result title")
+        
+        print(f"\n📝 Form Filling Demo:")
+        print("   ✅ Would navigate to any form URL")
+        print("   ✅ Would locate input fields by name/id")
+        print("   ✅ Would fill in:")
+        print("       - Name field")
+        print("       - Email field")
+        print("       - Subject field")
+        print("       - Message field")
+        print("   ✅ Would click submit button")
+        print("   ✅ Would take screenshot of result")
+        
+        print(f"\n🚀 Real-world applications:")
+        print("   • Automated testing of web applications")
+        print("   • Data collection from websites")
+        print("   • Form submissions (surveys, registrations)")
+        print("   • Price monitoring and alerts")
+        print("   • Social media posting")
+        print("   • Web scraping for research")
+        
+        print(f"\n🛠️ To fix browser issues:")
+        print("   1. Update Chromium: sudo pacman -S chromium")
+        print("   2. Update packages: pip install --upgrade selenium webdriver-manager")
+        print("   3. Check the logs: tail web_automation.log")
+        
+        print(f"\n✨ Once working, you can automate any repetitive web task!")
     
     else:
         print("Invalid choice. Please try again.")
