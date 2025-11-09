@@ -17,10 +17,17 @@ from email import encoders
 from pathlib import Path
 from typing import List, Optional
 import logging
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Try to import python-dotenv, handle gracefully if not installed
+try:
+    from dotenv import load_dotenv
+    # Load environment variables from .env file
+    load_dotenv()
+    DOTENV_AVAILABLE = True
+except ImportError:
+    print("📦 Note: python-dotenv not installed. Install with: pip install python-dotenv")
+    print("   For now, using system environment variables only.\n")
+    DOTENV_AVAILABLE = False
 
 # Set up logging
 logging.basicConfig(
@@ -227,32 +234,71 @@ def create_weekly_report_email(recipient: str, stats: dict) -> bool:
 
 if __name__ == "__main__":
     print("=== Email Sender Demo ===")
-    print("\nIMPORTANT: This is a demonstration. To actually send emails:")
-    print("1. Create a .env file in the project root")
-    print("2. Add your email credentials:")
-    print("   SENDER_EMAIL=your.email@gmail.com")
-    print("   SENDER_PASSWORD=your_app_password")
-    print("\nFor Gmail, use an App Password (not your regular password):")
-    print("https://support.google.com/accounts/answer/185833")
-    print("\n" + "="*50 + "\n")
+    print("📧 Automate your email communication with Python!")
+    print("\n" + "="*50)
+    
+    # Check setup status
+    setup_complete = True
+    setup_issues = []
+    
+    # Check if virtual environment is active
+    if os.environ.get('VIRTUAL_ENV'):
+        print("✅ Virtual environment is active")
+    else:
+        print("⚠️  Virtual environment not detected")
+        setup_issues.append("Run: source venv/bin/activate")
+    
+    # Check if python-dotenv is available
+    if DOTENV_AVAILABLE:
+        print("✅ python-dotenv is available")
+    else:
+        print("⚠️  python-dotenv not installed")
+        setup_issues.append("Run: pip install python-dotenv")
+        setup_complete = False
+    
+    # Check if .env file exists
+    if Path('.env').exists():
+        print("✅ .env file found")
+    else:
+        print("⚠️  .env file not found")
+        setup_issues.append("Run: cp .env.example .env (then edit with your credentials)")
+        setup_complete = False
     
     # Check if credentials are configured
-    if not DEFAULT_SENDER_EMAIL or not DEFAULT_SENDER_PASSWORD:
-        print("⚠️  Email credentials not configured.")
-        print("Please set up your .env file before running this script.")
-        print("\nFor demo purposes, here's what the code would do:\n")
-        
-        demo_email = "recipient@example.com"
-        demo_subject = "Hello from Python!"
-        demo_body = "This is an automated email sent using Python's smtplib library."
-        
-        print(f"To: {demo_email}")
-        print(f"Subject: {demo_subject}")
-        print(f"Body: {demo_body}")
-        print("\n✅ In a real scenario, this email would be sent!")
+    if not DEFAULT_SENDER_EMAIL or not DEFAULT_SENDER_PASSWORD or DEFAULT_SENDER_EMAIL == 'your.email@gmail.com':
+        print("⚠️  Email credentials not configured")
+        setup_issues.append("Edit .env file with your Gmail credentials")
+        setup_complete = False
     else:
-        # Interactive demo
-        print("Email credentials found! Let's send a test email.")
+        print("✅ Email credentials configured")
+    
+    print("\n" + "="*50)
+    
+    if not setup_complete:
+        print("\n🔧 SETUP REQUIRED:")
+        for i, issue in enumerate(setup_issues, 1):
+            print(f"   {i}. {issue}")
+        
+        print("\n📚 For Gmail users:")
+        print("   • Use an App Password (not your regular password)")
+        print("   • Get one here: https://support.google.com/accounts/answer/185833")
+        
+        print("\n🎭 DEMO MODE - Here's what this script can do:")
+        print("\n📨 Example Email:")
+        print("   To: recipient@example.com")
+        print("   Subject: Hello from Python!")
+        print("   Body: This is an automated email sent using Python!")
+        print("\n✨ Once configured, this script can:")
+        print("   • Send plain text emails")
+        print("   • Send HTML formatted emails") 
+        print("   • Send bulk emails to multiple recipients")
+        print("   • Generate and send automated reports")
+        
+        print(f"\n✅ Setup the credentials above, then run: python3 {__file__.split('/')[-1]}")
+        
+    else:
+        # Interactive demo - credentials are configured
+        print("\n🎉 Everything is set up! Let's send some emails.")
         
         choice = input("\n1. Send simple email\n2. Send HTML email\n3. Send weekly report\n\nChoose an option (1-3): ").strip()
         
